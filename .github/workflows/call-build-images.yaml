@@ -37,6 +37,9 @@ on:
       token:
         description: The Github token or similar to authenticate with for the registry.
         required: true
+      docker-token:
+        required: true
+        description: The Github token or similar to authenticate with for the registry.
       cosign_private_key:
         description: The optional Cosign key to use for signing the images.
         required: false
@@ -100,7 +103,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Extract metadata from Github
         id: meta
@@ -120,7 +123,7 @@ jobs:
           context: .
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7
+          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
           target: production
           push: true
           load: false
@@ -145,7 +148,7 @@ jobs:
           context: .
           tags: ${{ steps.debug-meta.outputs.tags }}
           labels: ${{ steps.debug-meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7
+          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
           target: debug
           push: true
           load: false
@@ -168,7 +171,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Generate schema
         run: |
@@ -199,7 +202,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Trivy - multi-arch
         uses: aquasecurity/trivy-action@master
@@ -302,7 +305,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Build the production images
         run: |
