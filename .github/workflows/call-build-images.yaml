@@ -98,12 +98,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64, arm/v7, ppc64le]
+        arch: [amd64, arm64, ppc64le]
         include:
           - arch: amd64
             suffix: x86_64
-          - arch: arm/v7
-            suffix: arm32v7
           - arch: arm64
             suffix: arm64v8
           - arch: ppc64le
@@ -202,7 +200,6 @@ jobs:
         run: |
           docker pull --platform=linux/amd64 ${{ inputs.registry }}/${{ inputs.image }}:x86_64-${{ inputs.version }}
           docker pull --platform=linux/arm64 ${{ inputs.registry }}/${{ inputs.image }}:arm64v8-${{ inputs.version }}
-          docker pull --platform=linux/arm/v7  ${{ inputs.registry }}/${{ inputs.image }}:arm32v7-${{ inputs.version }}
           docker pull --platform=linux/ppc64le ${{ inputs.registry }}/${{ inputs.image }}:ppc64le-${{ inputs.version }}
 
       - name: Create manifests for images
@@ -274,7 +271,7 @@ jobs:
           context: .
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
+          platforms: linux/amd64, linux/arm64, linux/ppc64le
           target: production
           push: true
           load: false
@@ -298,7 +295,7 @@ jobs:
           context: .
           tags: ${{ steps.debug-meta.outputs.tags }}
           labels: ${{ steps.debug-meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
+          platforms: linux/amd64, linux/arm64, linux/ppc64le
           target: debug
           push: true
           load: false
