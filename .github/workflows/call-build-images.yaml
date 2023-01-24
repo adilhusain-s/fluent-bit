@@ -32,11 +32,14 @@ on:
         description: Optionally add metadata to build to indicate an unstable build, set to the contents you want to add.
         type: string
         required: false
-        default: ''
+        default: ""
     secrets:
       token:
         description: The Github token or similar to authenticate with for the registry.
         required: true
+      docker-token:
+        required: true
+        description: The Github token or similar to authenticate with for the registry.
       cosign_private_key:
         description: The optional Cosign key to use for signing the images.
         required: false
@@ -79,8 +82,8 @@ jobs:
         with:
           pattern: '^(\d+\.\d+).*$'
           string: ${{ inputs.version }}
-          replace-with: '$1'
-          flags: 'g'
+          replace-with: "$1"
+          flags: "g"
 
   # For 1.8 builds it is a little more complex so we have this build matrix to handle it.
   # This creates separate images for each architecture.
@@ -95,7 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [ amd64, arm64, arm/v7 ]
+        arch: [amd64, arm64, arm/v7, ppc64le]
         include:
           - arch: amd64
             suffix: x86_64
@@ -103,6 +106,8 @@ jobs:
             suffix: arm32v7
           - arch: arm64
             suffix: arm64v8
+          - arch: ppc64le
+            suffix: ppc64le
     permissions:
       contents: read
       packages: write
@@ -110,8 +115,8 @@ jobs:
       - name: Checkout the docker build repo for legacy builds
         uses: actions/checkout@v3
         with:
-          repository: fluent/fluent-bit-docker-image
-          ref: '1.8' # Fixed to this branch
+          repository: adilhusain-s/fluent-bit-docker-image
+          ref: "1.8" # Fixed to this branch
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -124,7 +129,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - id: debug-meta
         uses: docker/metadata-action@v4
@@ -190,7 +195,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Pull all the images
         # Use platform to trigger warnings on invalid image metadata
@@ -198,6 +203,7 @@ jobs:
           docker pull --platform=linux/amd64 ${{ inputs.registry }}/${{ inputs.image }}:x86_64-${{ inputs.version }}
           docker pull --platform=linux/arm64 ${{ inputs.registry }}/${{ inputs.image }}:arm64v8-${{ inputs.version }}
           docker pull --platform=linux/arm/v7  ${{ inputs.registry }}/${{ inputs.image }}:arm32v7-${{ inputs.version }}
+          docker pull --platform=linux/ppc64le ${{ inputs.registry }}/${{ inputs.image }}:ppc64le-${{ inputs.version }}
 
       - name: Create manifests for images
         # Latest is 1.9, not 1.8 now
@@ -205,8 +211,8 @@ jobs:
           docker manifest create ${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }} \
             --amend ${{ inputs.registry }}/${{ inputs.image }}:x86_64-${{ inputs.version }} \
             --amend ${{ inputs.registry }}/${{ inputs.image }}:arm64v8-${{ inputs.version }} \
-            --amend ${{ inputs.registry }}/${{ inputs.image }}:arm32v7-${{ inputs.version }}
-          docker manifest push --purge ${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }}
+            --amend ${{ inputs.registry }}/${{ inputs.image }}:ppc64le-${{ inputs.version }}
+          docker manifest push --purge ${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }} \
         env:
           DOCKER_CLI_EXPERIMENTAL: enabled
         shell: bash
@@ -249,7 +255,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Extract metadata from Github
         id: meta
@@ -268,7 +274,7 @@ jobs:
           context: .
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7
+          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
           target: production
           push: true
           load: false
@@ -292,7 +298,7 @@ jobs:
           context: .
           tags: ${{ steps.debug-meta.outputs.tags }}
           labels: ${{ steps.debug-meta.outputs.labels }}
-          platforms: linux/amd64, linux/arm64, linux/arm/v7
+          platforms: linux/amd64, linux/arm64, linux/arm/v7, linux/ppc64le
           target: debug
           push: true
           load: false
@@ -316,7 +322,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Generate schema
         run: |
@@ -348,23 +354,23 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Trivy - multi-arch
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }}'
-          format: 'table'
-          exit-code: '1'
+          image-ref: "${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }}"
+          format: "table"
+          exit-code: "1"
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
       - name: Dockle - multi-arch
         uses: hands-lab/dockle-action@v1
         with:
-          image: '${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }}'
-          exit-code: '1'
+          image: "${{ inputs.registry }}/${{ inputs.image }}:${{ inputs.version }}"
+          exit-code: "1"
           exit-level: WARN
 
   call-build-images-sign:
@@ -448,7 +454,7 @@ jobs:
         with:
           registry: ${{ inputs.registry }}
           username: ${{ inputs.username }}
-          password: ${{ secrets.token }}
+          password: ${{ secrets.docker-token}}
 
       - name: Build the production images
         run: |
