@@ -231,6 +231,7 @@ static int opensearch_format(struct flb_config *config,
                              struct flb_input_instance *ins,
                              void *plugin_context,
                              void *flush_ctx,
+                             int event_type,
                              const char *tag, int tag_len,
                              const void *data, size_t bytes,
                              void **out_data, size_t *out_size)
@@ -241,10 +242,11 @@ static int opensearch_format(struct flb_config *config,
     int index_len = 0;
     int write_op_update = FLB_FALSE;
     int write_op_upsert = FLB_FALSE;
+    flb_sds_t ra_index = NULL;
     size_t s = 0;
     size_t off = 0;
     char *p;
-    char *index;
+    char *index = NULL;
     char logstash_index[256];
     char time_formatted[256];
     char index_formatted[256];
@@ -326,7 +328,7 @@ static int opensearch_format(struct flb_config *config,
      * The header stored in 'j_index' will be used for the all records on
      * this payload.
      */
-    if (ctx->logstash_format == FLB_FALSE && ctx->generate_id == FLB_FALSE) {
+    if (ctx->logstash_format == FLB_FALSE && ctx->generate_id == FLB_FALSE && ctx->ra_index == NULL) {
         flb_time_get(&tms);
         gmtime_r(&tms.tm.tv_sec, &tm);
         strftime(index_formatted, sizeof(index_formatted) - 1,
@@ -476,6 +478,37 @@ static int opensearch_format(struct flb_config *config,
                      ctx->index, &tm);
             index = index_formatted;
         }
+        else if (ctx->ra_index) {
+            // free any previous ra_index to avoid memory leaks.
+            if (ra_index != NULL) {
+                flb_sds_destroy(ra_index);
+            }
+            /* a record accessor pattern exists for the index */
+            ra_index = flb_ra_translate(ctx->ra_index,
+                                           (char *) tag, tag_len,
+                                           map, NULL);
+            if (!ra_index) {
+                flb_plg_warn(ctx->ins, "invalid index translation from record accessor pattern, default to static index");
+            }
+            else {
+                index = ra_index;
+            }
+
+            if (ctx->suppress_type_name) {
+                index_len = flb_sds_snprintf(&j_index,
+                                             flb_sds_alloc(j_index),
+                                             OS_BULK_INDEX_FMT_NO_TYPE,
+                                             ctx->action,
+                                             index);
+            }
+            else {
+                index_len = flb_sds_snprintf(&j_index,
+                                             flb_sds_alloc(j_index),
+                                             OS_BULK_INDEX_FMT,
+                                             ctx->action,
+                                             index, ctx->type);
+            }
+        }
 
         /* Tag Key */
         if (ctx->include_tag_key == FLB_TRUE) {
@@ -498,6 +531,9 @@ static int opensearch_format(struct flb_config *config,
             msgpack_sbuffer_destroy(&tmp_sbuf);
             flb_sds_destroy(bulk);
             flb_sds_destroy(j_index);
+            if (ra_index != NULL) {
+                flb_sds_destroy(ra_index);
+            }
             return -1;
         }
 
@@ -555,6 +591,9 @@ static int opensearch_format(struct flb_config *config,
             msgpack_unpacked_destroy(&result);
             flb_sds_destroy(bulk);
             flb_sds_destroy(j_index);
+            if (ra_index != NULL) {
+                flb_sds_destroy(ra_index);
+            }
             return -1;
         }
 
@@ -565,8 +604,10 @@ static int opensearch_format(struct flb_config *config,
             flb_sds_destroy(bulk);
             flb_sds_destroy(j_index);
             flb_sds_destroy(out_buf);
+            if (ra_index != NULL) {
+                flb_sds_destroy(ra_index);
+            }
             return -1;
-
         }
 
         if (strcasecmp(ctx->write_operation, FLB_OS_WRITE_OP_UPDATE) == 0) {
@@ -595,6 +636,9 @@ static int opensearch_format(struct flb_config *config,
             flb_sds_destroy(bulk);
             flb_sds_destroy(j_index);
             flb_sds_destroy(out_buf);
+            if (ra_index != NULL) {
+                flb_sds_destroy(ra_index);
+            }
             return -1;
         }
 
@@ -612,6 +656,9 @@ static int opensearch_format(struct flb_config *config,
     *out_data = bulk;
     *out_size = flb_sds_len(bulk);
 
+    if (ra_index != NULL) {
+        flb_sds_destroy(ra_index);
+    }
     /*
      * Note: we don't destroy the bulk as we need to keep the allocated
      * buffer with the data. Instead we just release the bulk context and
@@ -829,6 +876,7 @@ static void cb_opensearch_flush(struct flb_event_chunk *event_chunk,
     /* Convert format */
     ret = opensearch_format(config, ins,
                                ctx, NULL,
+                               event_chunk->type,
                                event_chunk->tag, flb_sds_len(event_chunk->tag),
                                event_chunk->data, event_chunk->size,
                                &out_buf, &out_size);

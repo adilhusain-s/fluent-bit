@@ -72,7 +72,7 @@ static inline int process_pack(struct tcp_conn *conn,
 
     msgpack_unpacked_destroy(&result);
 
-    flb_input_chunk_append_raw(conn->ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
+    flb_input_log_append(conn->ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
     msgpack_sbuffer_destroy(&mp_sbuf);
 
     return 0;
@@ -153,7 +153,7 @@ static ssize_t parse_payload_none(struct tcp_conn *conn)
         }
     }
 
-    flb_input_chunk_append_raw(conn->ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
+    flb_input_log_append(conn->ins, NULL, 0, mp_sbuf.data, mp_sbuf.size);
     msgpack_sbuffer_destroy(&mp_sbuf);
 
     return consumed;
@@ -184,9 +184,9 @@ int tcp_conn_event(void *data)
         available = (conn->buf_size - conn->buf_len) - 1;
         if (available < 1) {
             if (conn->buf_size + ctx->chunk_size > ctx->buffer_size) {
-                flb_plg_trace(ctx->ins,
-                              "fd=%i incoming data exceed limit (%zu KB)",
-                              event->fd, (ctx->buffer_size / 1024));
+                flb_plg_warn(ctx->ins,
+                             "fd=%i incoming data exceeds 'Buffer_Size' (%zu KB)",
+                             event->fd, (ctx->buffer_size / 1024));
                 tcp_conn_del(conn);
                 return -1;
             }
